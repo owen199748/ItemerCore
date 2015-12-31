@@ -1,0 +1,9 @@
+name: Itemer
+main: pw.owen.itemer.main.Main
+version: 1.0.0
+commands:
+  Itemer:
+    description: by owen
+    usage: §c[Itemer]§5参数错误,您可以使用/Itemer help命令排查错误.
+    permission: Itemer
+    permission-message: §c[Itemer]§5您没有<Itemer>权限
