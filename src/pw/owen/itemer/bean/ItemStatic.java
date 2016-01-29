@@ -6,12 +6,19 @@ import java.util.Arrays;
 import java.util.List;
 
 import net.minecraft.server.v1_8_R3.NBTTagCompound;
+import net.minecraft.server.v1_8_R3.NBTTagList;
 
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.craftbukkit.v1_8_R3.inventory.CraftItemStack;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Player;
+import org.bukkit.event.Event;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
-import pw.owen.itemer.utils.RangeInt;
+import pw.owen.itemer.bean.attribute.Attributive;
+import pw.owen.itemer.main.Main;
+import pw.owen.itemer.utils.JarLoad;
 import pw.owen.itemer.utils.Send;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
@@ -25,70 +32,126 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @JsonIgnoreProperties({ "hibernateLazyInitializer", "handler" })
 public class ItemStatic{
 	public static final String START = "===装备属性===";
+	private static List<Class<Attributive>> cls;
 	@JsonProperty
-	private RangeInt damage = null;
-	// 增加的伤害
-	@JsonProperty
-	private RangeInt hp = null;
-	// 增加的血量
-	@JsonProperty
-	private Crit crit = null;
-	// 暴击几率
-	@JsonProperty
-	private Reflect reflect = null;
-	// 反伤
-	@JsonProperty
-	private LifeSteal lifeSteal = null;
-	// 生命偷取
+	private ArrayList<Attributive> attributes = new ArrayList<Attributive>();
+	static {
+		try {
+			cls = new ArrayList<Class<Attributive>>();
+			List<Class<?>> clss = JarLoad.getJarClass(Main.getMyfile()
+					.getAbsolutePath(), Attributive.class, Main.getClassloader());
+			for (int i = 0; i < clss.size(); i++)
+				if (clss.get(i).newInstance() instanceof Attributive)
+					cls.add((Class<Attributive>) clss.get(i));
 
-	private ItemStatic() {
-	}
 
-	public double getCritDamage() {
-		return critDamage;
+		} catch (ClassNotFoundException | IOException | InstantiationException
+				| IllegalAccessException e) {
+			cls = new ArrayList<Class<Attributive>>();
+			e.printStackTrace();
+		}
+
 	}
 
-	public void setCritDamage(double critDamage) {
-		this.critDamage = critDamage;
+	public static void save(YamlConfiguration yml) throws Exception {
+		for (int i = 0; i < cls.size(); i++)
+			if (cls.get(i) != null)
+				cls.get(i).newInstance().saveYml(yml);
+
 	}
 
-	public double getCrit() {
-		return crit;
+	public static void load(YamlConfiguration yml) throws Exception {
+		for (int i = 0; i < cls.size(); i++)
+			if (cls.get(i) != null)
+				cls.get(i).newInstance().loadYml(yml);
 	}
 
-	public void setCrit(double crit) {
-		this.crit = crit;
+	public boolean set(String name, String parName, String value)
+			throws Exception {
+		boolean b = false;
+		for (int i = 0; i < attributes.size(); i++)
+			if (attributes.get(i).getName().equalsIgnoreCase(name))
+				b = attributes.get(i).set(parName, value);
+		if (!b) {
+		Attributive attr = ItemStatic.getAttribute(name);
+		if (attr != null) 
+			if (attr.set(parName, value))
+ {
+				attributes.add(attr);
+				b = true;
+			}
+		}
+		
+		checkVoid();
+		return b;
 	}
 
-	public RangeInt getDamage() {
-		return damage;
+	public static List<Attributive> bubbleSort(List<Attributive> list) {
+		Attributive[] ls = new ArrayList<Attributive>(list)
+				.toArray(new Attributive[list.size()]);
+
+		Attributive temp;
+		for (int i = 0; i < ls.length - 1; i++)
+			for (int j = i + 1; j < ls.length; j++)
+				if (ls[i].getPriority() > ls[j].getPriority()) {
+					temp = ls[j];
+					ls[j] = ls[i];
+					ls[i] = temp;
+		}
+
+		return new ArrayList<Attributive>(Arrays.asList(ls));
 	}
 
-	public RangeInt getHp() {
-		return hp;
+	public void checkVoid() throws Exception {
+		ArrayList<Attributive> ls = new ArrayList<Attributive>(attributes);
+		for(int i=0;i<ls.size();i++){
+			Attributive ab = ls.get(i);
+			Object[] as = ab.getParameters().keySet().toArray();
+			boolean f = false;
+			for (int r = 0; r < as.length; r++)
+				if (ab.get((String) as[r]) != null)
+ {
+					f = true;
+					break;
+				}
+			if (!f)
+				attributes.remove(ab);
+		}
 	}
 
-	public double getSpeed() {
-		return speed;
+
+	public static Attributive getAttribute(String name) {
+		for (int i = 0; i < cls.size(); i++) {
+			try {
+				Attributive at = (Attributive) cls.get(i).newInstance();
+				if (at.getName().equalsIgnoreCase(name))
+					return at;
+			} catch (InstantiationException | IllegalAccessException e) {
+				// TODO 自动生成的 catch 块
+				e.printStackTrace();
+				return null;
+			}
+
+		}
+		return null;
 	}
 
-	public void setDamage(RangeInt damage) {
-		this.damage = damage;
+	private ItemStatic() throws Exception {
+		// this.attributes = new Attribute[cls.size()];
+
 	}
 
-	public void setHp(RangeInt hp) {
-		this.hp = hp;
-	}
-	public void setSpeed(double speed) {
-		this.speed = speed;
-	}
+
 
 	public ItemStack putItemStatic(ItemStack it) {
 		net.minecraft.server.v1_8_R3.ItemStack it2 = CraftItemStack
 				.asNMSCopy(it);
+		if (it2 == null)
+			return null;
 		NBTTagCompound tag = it2.getTag();
 		if (tag == null)
 			tag = new NBTTagCompound();
+
 		ObjectMapper mapper = new ObjectMapper();
 
 		mapper.setVisibility(PropertyAccessor.FIELD, Visibility.ANY);
@@ -99,6 +162,11 @@ public class ItemStatic{
 			Send.sendConsole("NBT序列化失败");
 			e.printStackTrace();
 		}
+		if (attributes.size() == 0)
+			tag.remove("ItemerNBT_owen");
+
+		NBTTagList am = new NBTTagList();
+		tag.set("AttributeModifiers", am);
 		it2.setTag(tag);
 		ItemStack it3 = CraftItemStack.asBukkitCopy(it2);
 		return updateTag(it3);
@@ -107,14 +175,19 @@ public class ItemStatic{
 	
 
 	public static ItemStatic getItemStatic(ItemStack it) {
+		if (it == null)
+			return null;
 		net.minecraft.server.v1_8_R3.ItemStack it2 = CraftItemStack
 				.asNMSCopy(it);
+		if (it2 == null)
+			return null;
 		if (it2.getTag() == null)
 			it2.setTag(new NBTTagCompound());
 		String nbt = it2.getTag().getString("ItemerNBT_owen");
 		if (nbt != null && nbt.trim() != "") {
 			// 加载NBT反序列化为ItemStatic实例.
 			ObjectMapper mapper = new ObjectMapper();
+			mapper.enableDefaultTyping();
 			mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,
 					false);
 			mapper.configure(
@@ -145,22 +218,23 @@ public class ItemStatic{
 	}
 
 	public static ItemStatic getNewItemStatic() {
-		return new ItemStatic();
+		try {
+			return new ItemStatic();
+		} catch (Exception e) {
+			e.printStackTrace();
+			return null;
+		}
 	}
 
-	public static double getDamageMarkon(double dmg, List<ItemStatic> item) {
-		// TODO 计算这些物品的伤害对伤害的加成
-		return 0;
-	}
 
-	public static double getArmorMarkon(double dmg, List<ItemStatic> item) {
-		// TODO 计算这些物品的护甲对伤害的加成
-		return 0;
-	}
 
 	private ItemStack updateTag(ItemStack it3) {
 		ItemMeta im = it3.getItemMeta();
-		Object[] tag = im.getLore().toArray();
+		Object[] tag = null;
+		if (im.getLore() != null)
+			tag = im.getLore().toArray();
+		else
+			tag = new String[] {};
 		for (int i = 0; i < tag.length; i++)
 			if (((String) tag[i]).equals(START))
 				tag = Arrays.copyOf(tag, i);
@@ -168,8 +242,11 @@ public class ItemStatic{
 		List<String> ls = new ArrayList<String>();
 		for (int i = 0; i < tag.length; i++)
 			ls.add(tag[i].toString());
+		String str = toString();
+		if (str != null) {
 		ls.add(START);
-		ls.addAll(Arrays.asList(toString().split("\n")));
+		ls.addAll(Arrays.asList(str.split("\n")));
+		}
 		im.setLore(ls);
 		it3.setItemMeta(im);
 		return it3;
@@ -177,7 +254,81 @@ public class ItemStatic{
 
 	@Override
 	public String toString() {
-		// 返回期待的属性列表
-		return "";
+		if (attributes.size() == 0)
+			return null;
+		String str = "";
+		for (int i = 0; i < attributes.size(); i++) {
+			String ss = attributes.get(i).getInfo();
+			if (ss == null)
+				continue;
+
+			if (i != 0)
+				str += "\n";
+			str += ss;
+		}
+		return str;
+	}
+
+	public static List<ItemStatic> getItemsOfLivingEntity(LivingEntity e) {
+		List<ItemStatic> ls = new ArrayList<ItemStatic>();
+		
+		ItemStatic it;
+		if ((it = ItemStatic.getItemStatic(e.getEquipment().getBoots())) != null)
+			ls.add(it);
+		if ((it = ItemStatic.getItemStatic(e.getEquipment().getChestplate())) != null)
+			ls.add(it);
+		if ((it = ItemStatic.getItemStatic(e.getEquipment().getHelmet())) != null)
+			ls.add(it);
+		if ((it = ItemStatic.getItemStatic(e.getEquipment().getLeggings())) != null)
+			ls.add(it);
+		if ((it = ItemStatic.getItemStatic(e.getEquipment().getItemInHand())) != null)
+			ls.add(it);
+
+		return ls;
+	}
+
+	public List<Attributive> getAttributes() {
+		return attributes;
+	}
+	public static void runEventOfLivingEntity(LivingEntity entity, Event event) {
+		List<ItemStatic> ls = ItemStatic.getItemsOfLivingEntity(entity);
+		List<Attributive> lss = new ArrayList<Attributive>();
+		for(int i=0;i<ls.size();i++)
+			for (int r = 0; r < ls.get(i).getAttributes().size(); r++)
+				lss.add(ls.get(i).getAttributes().get(r));
+
+		lss = ItemStatic.bubbleSort(lss);
+
+		for (int i = 0; i < lss.size(); i++)
+			lss.get(i).runEvent(event, entity);
+
+	}
+
+	public static void help(Player p) {
+	Send.sendPluginMessage(p, "///帮助///");
+		Send.sendPluginMessage(p, "///Itemer属性:插件所有的属性,比如攻击,血量,防御.");
+		Send.sendPluginMessage(p, "///子属性:Itemer属性中的子属性,存在装备之内,比如攻击属性中的攻击力");
+		Send.sendPluginMessage(p,
+				"///设置属性:Itemer属性中的设置属性,不存在装备之内,比如暴击属性中的暴击伤害(统一更改)");
+	Send.sendPluginMessage(p, "/Itemer set [Itemer属性] [子属性/设置属性] [值] 为手上的装备设置一个值.");
+		Send.sendPluginMessage(p, "/Itemer get 列出Itemer支持的所有属性.");
+		Send.sendPluginMessage(p,
+				"/Itemer get [Itemer属性] 列出这个Itemer属性拥有的所有子属性和设置属性");
+		Send.sendPluginMessage(p,
+				"/Itemer get [Itemer属性] [子属性/设置属性] 列出这个子属性或设置属性的值");
+		Send.sendPluginMessage(p, "/Itemer help 帮助");
+	}
+
+	public static boolean setStatic(String str1, String str2, String str3)
+			throws Exception {
+		Attributive attr = getAttribute(str1);
+		if(attr==null)
+		return false;
+		
+		return attr.setStatic(str2, str3);
+	}
+
+	public static List<Class<Attributive>> getAttributeClassList() {
+		return cls;
 	}
 }
